@@ -1,0 +1,12 @@
+# cooldocker
+
+list docker entities with color and count
+
+Need to install for dev:
+  pip install types-tabulate
+  pip install types-termcolor
+  pip install termcolor
+  pip install tabulate
+  pip install docker
+
+  also for type linting/checking mypy -> pip install mypy
