@@ -4,6 +4,7 @@
 .DS_Store
 tags
 __pycache__/
+.mypy_cache/
 build/
 *.so
 *.c
