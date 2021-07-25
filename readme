@@ -1,0 +1,16 @@
+cooldocker
+
+list docker entities with color and count
+
+Need to install for dev:
+  pip install types-tabulate \
+							types-termcolor
+  						termcolor \
+  						tabulate \
+  						docker \
+							mypy # this is for checking the types
+
+tested with Docker Engine for Mac on macOS 11.2 and Docker 20.10.6
+
+execute ./build to expose it to your $HOME/.local/bin as cooldocker
+
