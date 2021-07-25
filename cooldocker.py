@@ -16,7 +16,10 @@ from datetime import (
 )
 from tabulate import tabulate as tab
 from termcolor import colored as co
-from docker.errors import APIError #type: ignore
+from docker.errors import ( #type: ignore
+    APIError, #type: ignore
+    DockerException, #type: ignore
+)
 from docker.models.images import Image #type: ignore
 from docker.models.containers import Container #type: ignore
 from docker.models.volumes import Volume #type: ignore
@@ -223,8 +226,8 @@ def main(args=None):
         cooldocker.print(want=args.all or args.n, entity=cooldocker.networks(), color="green")
         cooldocker.print(want=args.all or args.v, entity=cooldocker.volumes(), color="magenta")
 
-    except APIError as api_err:
-        print(f"Docker Engine might not be running. Please start it. \n ERR: {api_err}")
+    except (APIError, DockerException) as err:
+        print(f"Docker Engine might not be running. Please check if it is and run this again. \nMessage: {err}")
 
 
 # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
