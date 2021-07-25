@@ -1,4 +1,8 @@
+#!/bin/bash
+
 """ CoolDocker || list docker entities with color and count """
+
+__version__ = "1.0.0"
 
 from argparse import (
     ArgumentParser,
@@ -236,7 +240,7 @@ def str2bool(v):
 
 if __name__ == "__main__":
     __version__ = "1.0.0"
-    __prog_name__ = "cooldocker"
+
     parser = ArgumentParser(
         description="list docker entities with color and count",
         epilog="For issues visit https://github.com/lukasjoc/cooldocker/issues"
@@ -257,6 +261,8 @@ if __name__ == "__main__":
     parser.add_argument("-v", type=str2bool, nargs='?', const=True,
 			      default=False, help="Show volumes")
 
+    parser.add_argument('--version', action='version',
+                                     version='%(prog)s 1.0.0')
     args = parser.parse_args()
     main(args=args)
 

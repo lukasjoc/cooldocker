@@ -1,0 +1,13 @@
+#!/bin/bash
+set -eu
+
+# build/expose script
+
+LOCAL_BIN="$HOME/.local/bin/"
+
+# copy it over to local bins
+cp cooldocker.py "$LOCAL_BIN/cooldocker"
+
+# make it executable
+chmod u+x "$LOCAL_BIN/cooldocker"
+
