@@ -1,9 +1,9 @@
-from docker import from_env, DockerClient # type: ignore
-from tabulate import tabulate
-from termcolor import colored
+from typing import List, Dict
 from dataclasses import dataclass
 from datetime import (datetime as dt, timedelta)
-from typing import List, Dict, NamedTuple, Any
+from tabulate import tabulate
+from termcolor import colored
+from docker import from_env, DockerClient # type: ignore
 
 @dataclass
 class CoolDockerEntity:
@@ -11,7 +11,7 @@ class CoolDockerEntity:
     # for cooldocker entities
     name: str
     cols: List[str]
-    data: dict# Dict[str, List[Any]]
+    data: Dict[str, Dict[str, str]]
     count: int
 
 class CoolDockerParser:
@@ -21,22 +21,27 @@ class CoolDockerParser:
 
     # calc the delta from a given time string to current time
     # following a given format
-    def __timedelta(self, time: str, pattern="%Y-%m-%dT%H:%M:%S") -> str:
+    def __timedelta(self, time: str, pattern: str="%Y-%m-%dT%H:%M:%S") -> str:
         delta = abs(
             dt.strptime(dt.strftime(dt.today(), pattern), pattern)
             - dt.strptime(time.split(".")[0], pattern)
         )
-
         delta_secs_total = int(delta.total_seconds()) - (60*60)
-
         delta_time_str: str = str(timedelta(seconds=delta_secs_total))
-
         return (f"> {delta.days} days ago"
                 if delta.days >= 1
-                else f"{delta_time_str} ago")[0]
+                else f"{delta_time_str} ago")
+
+    # print the table data in a tabulated way and
+    # also print the count of the entity in a header line
+    def print(self, entity: CoolDockerEntity, color: str=None) -> None:
+        entity_name: str = entity.name
+        entity_count: str = str(len(entity.data.keys()))
+        print(f"[{colored(entity_count, color=color)}] {colored(entity_name, color=color)}:")
+        print(tabulate([a.values() for a in entity.data.values()], headers=entity.cols))
 
     def containers(self) -> CoolDockerEntity:
-        data = []
+        data = {}
         container_list: list = self.client.containers.list()
         cols = [ "CONTAINER ID", "IMAGE", "CREATED", "STATUS", "PORTS", "NAMES", "IP ADDRESS" ]
 
@@ -77,15 +82,15 @@ class CoolDockerParser:
                 health_state = state["Health"]["Status"]
                 status = f"{status} ({health_state})"
 
-            data[f"{name}"] = [
-                name,
-                image,
-                created,
-                status,
-                ports,
-                names,
-                ip,
-            ]
+            data[name] = {
+                "name": name,
+                "image": image,
+                "created": created,
+                "status": status,
+                "ports": ports,
+                "names": names,
+                "ip": ip,
+            }
 
         count = len(data)
         name = "CONTAINER" if count <= 1 else "CONTAINERS"
@@ -155,10 +160,15 @@ class CoolDockerParser:
 
 if __name__ == "__main__":
     try:
+	# print the data count in the right color
+	#def print_counts(what: str, color: str, count: int) -> None:
+        # print(f"[{colored(str(count), color=color)}] {colored(what, color=color)}:")
+
         docker_client = from_env()
         cooldocker = CoolDockerParser(client=docker_client)
 
-        print(cooldocker.containers())
+        cooldocker.print(entity=cooldocker.containers(), color="cyan")
+
 
         #container_data, container_cols = container_info(client=cl)
         #print(f"[{colored(str(len(container_data)), color='cyan')}] {colored('CONTAINER', color='cyan')}:")
