@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env python3
 
 """ CoolDocker || list docker entities with color and count """
 
