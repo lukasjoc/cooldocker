@@ -1,27 +1,55 @@
-from typing import List, Dict
+""" CoolDocker || list docker entities with color and count """
+
+from argparse import (
+    ArgumentParser,
+    ArgumentTypeError
+)
+from typing import List, Dict, Tuple, Any
 from dataclasses import dataclass
-from datetime import (datetime as dt, timedelta)
-from tabulate import tabulate
-from termcolor import colored
-from docker import from_env, DockerClient # type: ignore
+from datetime import (
+    datetime as dt,
+    timedelta
+)
+from tabulate import tabulate as tab
+from termcolor import colored as co
+from docker.errors import APIError #type: ignore
+from docker.models.images import Image #type: ignore
+from docker.models.containers import Container #type: ignore
+from docker.models.volumes import Volume #type: ignore
+from docker.models.networks import Network #type: ignore
+from docker import ( #type: ignore
+    from_env, #type: ignore
+    DockerClient #type: ignore
+)
 
 @dataclass
 class CoolDockerEntity:
-    # defines the dat fro a single entity
-    # for cooldocker entities
+    """
+    defines the dat for a single entity
+    for cooldocker entities
+    """
     name: str
     cols: List[str]
-    data: Dict[str, Dict[str, str]]
+    data: Dict[str, Tuple[str, ...]]
     count: int
 
 class CoolDockerParser:
+    """
+    Parser for Docker Entities
+    Currently supporting:
+    - Containers
+    - Images
+    - Volumes
+    - Networks
+    """
     def __init__(self, client):
         self.client: DockerClient = client
         self.ctx: Dict[str, CoolDockerEntity] = {}
 
     # calc the delta from a given time string to current time
     # following a given format
-    def __timedelta(self, time: str, pattern: str="%Y-%m-%dT%H:%M:%S") -> str:
+    @staticmethod
+    def __timedelta(time: str, pattern: str = "%Y-%m-%dT%H:%M:%S") -> str:
         delta = abs(
             dt.strptime(dt.strftime(dt.today(), pattern), pattern)
             - dt.strptime(time.split(".")[0], pattern)
@@ -34,34 +62,37 @@ class CoolDockerParser:
 
     # print the table data in a tabulated way and
     # also print the count of the entity in a header line
-    def print(self, entity: CoolDockerEntity, color: str=None) -> None:
-        entity_name: str = entity.name
-        entity_count: str = str(len(entity.data.keys()))
-        print(f"[{colored(entity_count, color=color)}] {colored(entity_name, color=color)}:")
-        print(tabulate([a.values() for a in entity.data.values()], headers=entity.cols))
+    @staticmethod
+    def print(entity: CoolDockerEntity, want: bool = True, color: str = None) -> None:
+        if not want:
+            return
+        print(f"[{co(str(entity.count), color=color)}] {co(entity.name, color=color)}:")
+        print(tab(entity.data.values(), headers=entity.cols) + "\n")
 
     def containers(self) -> CoolDockerEntity:
-        data = {}
-        container_list: list = self.client.containers.list()
-        cols = [ "CONTAINER ID", "IMAGE", "CREATED", "STATUS", "PORTS", "NAMES", "IP ADDRESS" ]
+        data: Dict[str, Tuple[str, ...]] = {}
+        cols: List[str] = [ "CONTAINER ID", "IMAGE", "CREATED",
+                            "STATUS", "PORTS", "NAMES", "IP ADDRESS" ]
 
+        container_list: List[Container] = self.client.containers.list()
         for container in container_list:
-            attrs: dict = container.attrs
-            ns: dict = attrs["NetworkSettings"]
-            config: dict = attrs["Config"]
+            attrs: Dict[str, Any] = container.attrs
+            config: Dict[str, Any] = attrs["Config"]
 
             # get container base data
-            name = config["Hostname"]
-            image = config["Image"]
-            names = attrs["Name"][1:]
-            created = self.__timedelta(time=attrs["Created"])
+            container_name: str = config["Hostname"]
+            image: str = config["Image"]
+            names: str = attrs["Name"][1:]
+            created: str = self.__timedelta(time=attrs["Created"])
+
+
+            ns: dict = attrs["NetworkSettings"]
 
             # get all the ports and port mappings
-            # from host to container
-            # and vice versa
-            cports = ns["Ports"].items()
+            # from host to container and vice versa
+            network_ports: Dict[Any, Any] = ns["Ports"].items()
             ports: str = ""
-            for port, mapping in cports:
+            for port, mapping in network_ports:
                 ports += f"{port}"
                 if mapping:
                     for item in mapping:
@@ -70,30 +101,22 @@ class CoolDockerParser:
                         ports += f"{host_ip}:{host_port}->{port} "
 
             # get the container ip
-            ip = ns["IPAddress"]
+            ip: str = ns["IPAddress"]
             network_mode = attrs["HostConfig"]["NetworkMode"]
             if network_mode != "default":
                 ip = ns["Networks"][network_mode]["IPAddress"]
 
             # get the current container status
             state = attrs["State"]
-            status = state["Status"]
+            status: str = state["Status"]
             if "Health" in state:
                 health_state = state["Health"]["Status"]
                 status = f"{status} ({health_state})"
 
-            data[name] = {
-                "name": name,
-                "image": image,
-                "created": created,
-                "status": status,
-                "ports": ports,
-                "names": names,
-                "ip": ip,
-            }
+            data[container_name] = container_name, image, created, status, ports, names, ip
 
-        count = len(data)
-        name = "CONTAINER" if count <= 1 else "CONTAINERS"
+        count: int = len(data)
+        name: str = "CONTAINER" if count <= 1 else "CONTAINERS"
         self.ctx["containers"] = CoolDockerEntity(
             name=name,
             cols=cols,
@@ -102,90 +125,138 @@ class CoolDockerParser:
         )
         return self.ctx["containers"]
 
+    def images(self, filters: Dict[str, bool] = None) -> CoolDockerEntity:
+        data: Dict[str, Tuple[str, ...]] = {}
+        cols: List[str] = [ "ID", "REPO", "TAG", "CREATED", "SIZE (MiB)" ]
 
-#         def image_info(client):
-#             image_data = []
-#             for image in client.images.list(filters={"dangling": False}):
-#                 attrs = image.attrs
-#                 def get_image_repo():
-#                     if len(attrs["RepoTags"]) >= 1:
-#                         return attrs["RepoTags"][0].split(":")[0]
-#
-#                 def get_image_tag():
-#                     if len(attrs["RepoTags"]) >= 1:
-#                         return attrs["RepoTags"][0].split(":")[1]
-#
-#                 def get_image_size():
-#                     return attrs["Size"]/8/(1024**2)
-#
-#                 image_data.append([
-#                     get_image_repo(),
-#                     get_image_tag(),
-#                     __format_timedelta(time_str=attrs["Created"]),
-#                     get_image_size(),
-#                     ])
-#
-#             image_cols = [ "REPOSITORY", "TAG", "CREATED", "SIZE(MiB)" ]
-#             return image_data, image_cols
-#
-#         def net_info(client):
-#             net_data = []
-#             for net in client.networks.list(filters={"dangling": True}):
-#                 attrs = net.attrs
-#                 net_data.append([
-#                     attrs['Id'][:7],
-#                     attrs["Name"],
-#                     attrs["Driver"],
-#                     __format_timedelta(time_str=attrs["Created"]),
-#                     attrs["Scope"],
-#                     attrs["Internal"],
-#                     attrs["Attachable"],
-#                     ])
-#
-#             net_cols = [ "NET ID", "NAME", "DRIVER", "CREATED", "SCOPE", "INTERNAL", "ATTACHABLE"]
-#             return net_data, net_cols
-#
-#         def vol_info(client):
-#             vol_data = []
-#             for vol in client.volumes.list():
-#                 attrs = vol.attrs
-#                 vol_data.append([
-#                     attrs["Name"],
-#                     attrs["Driver"],
-#                     attrs["Scope"],
-#                     ])
-#
-#             vol_cols = [ "NAME", "DRIVER", "VOLUME", "SCOPE"]
-#             return vol_data, vol_cols
+        filters = filters if filters else { "dangling": False }
+        filtered_images: List[Image] = self.client.images.list(filters=filters)
+        for image in filtered_images:
+            attrs: Dict[str, Any] = image.attrs
 
-if __name__ == "__main__":
+            image_id: str = attrs["Id"]
+            created: str = self.__timedelta(time=attrs["Created"])
+            mib_image_size = f"{attrs['Size']/8/1024**2:07.3f} MiB"
+            repo_tags: List[str] = attrs["RepoTags"]
+            first_tag: List[str] = repo_tags[0].split(":")
+            tags_count: int = len(repo_tags)
+            repo: str = first_tag[0] if tags_count >= 1 else ""
+            tags: str = first_tag[1] if tags_count >= 1 else ""
+
+            data[image_id] = image_id, repo, tags, created, mib_image_size
+
+        count: int = len(data)
+        name: str = "IMAGE" if count <= 1 else "IMAGES"
+        self.ctx["images"] = CoolDockerEntity(
+            name=name,
+            cols=cols,
+            data=data,
+            count=count,
+        )
+        return self.ctx["images"]
+
+    def networks(self, filters: Dict[str, bool] = None) -> CoolDockerEntity:
+        data: Dict[str, Tuple[str, ...]] = {}
+        cols: List[str] = [ "NET ID", "NAME", "DRIVER", "CREATED",
+                            "SCOPE", "INTERNAL", "ATTACHABLE"]
+
+        filters = filters if filters else { "dangling": True }
+        filtered_networks: List[Network] = self.client.networks.list(filters=filters)
+        for network in filtered_networks:
+            attrs: Dict[str, Any] = network.attrs
+
+            network_id: str = attrs['Id']
+            network_name: str = attrs["Name"]
+            driver: str = attrs["Driver"]
+            created: str = self.__timedelta(time=attrs["Created"])
+            scope: str = attrs["Scope"]
+            is_internal: str = attrs["Internal"]
+            is_attachable: str = attrs["Attachable"]
+
+            data[network_id] = (network_id, network_name, driver, created,
+                                scope, is_internal, is_attachable )
+        count: int = len(data)
+        name: str = "NETWORK" if count <= 1 else "NETWORKS"
+        self.ctx["networks"] = CoolDockerEntity(
+            name=name,
+            cols=cols,
+            data=data,
+            count=count,
+        )
+        return self.ctx["networks"]
+
+    def volumes(self) -> CoolDockerEntity:
+        data: Dict[str, Tuple[str, ...]] = {}
+        cols: List[str] = [ "NAME", "DRIVER", "VOLUME", "SCOPE"]
+
+        volumes: List[Volume] = self.client.volumes.list()
+        for volume in volumes:
+            attrs: Dict[str, Any] = volume.attrs
+            volume_name: str = attrs["Name"]
+            driver: str = attrs["Driver"]
+            scope: str = attrs["Scope"]
+
+            data[volume_name] = volume_name, driver, scope
+
+        count: int = len(data)
+        name: str = "VOLUME" if count <= 1 else "VOLUMES"
+        self.ctx["volumes"] = CoolDockerEntity(
+            name=name,
+            cols=cols,
+            data=data,
+            count=count,
+        )
+        return self.ctx["volumes"]
+
+def main(args=None):
     try:
-	# print the data count in the right color
-	#def print_counts(what: str, color: str, count: int) -> None:
-        # print(f"[{colored(str(count), color=color)}] {colored(what, color=color)}:")
-
         docker_client = from_env()
         cooldocker = CoolDockerParser(client=docker_client)
 
-        cooldocker.print(entity=cooldocker.containers(), color="cyan")
+        args.all = not any([args.c, args.i, args.n, args.v])
+        cooldocker.print(want=args.all or args.c, entity=cooldocker.containers(), color="cyan")
+        cooldocker.print(want=args.all or args.i, entity=cooldocker.images(), color="red")
+        cooldocker.print(want=args.all or args.n, entity=cooldocker.networks(), color="green")
+        cooldocker.print(want=args.all or args.v, entity=cooldocker.volumes(), color="magenta")
+
+    except APIError as api_err:
+        print(f"Docker Engine might not be running. Please start it. \n ERR: {api_err}")
 
 
-        #container_data, container_cols = container_info(client=cl)
-        #print(f"[{colored(str(len(container_data)), color='cyan')}] {colored('CONTAINER', color='cyan')}:")
-        #print(tabulate(container_data, headers=container_cols))
+# https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise ArgumentTypeError('Boolean value expected.')
 
-        #image_data, image_cols = image_info(client=cl)
-        #print(f"\n[{colored(str(len(image_data)), color='green')}] {colored('IMAGES', color='green')}:")
-        #print(tabulate(image_data, headers=image_cols))
+if __name__ == "__main__":
+    __version__ = "1.0.0"
+    __prog_name__ = "cooldocker"
+    parser = ArgumentParser(
+        description="list docker entities with color and count",
+        epilog="For issues visit https://github.com/lukasjoc/cooldocker/issues"
+    )
 
-        #net_data, net_cols = net_info(client=cl)
-        #print(f"\n[{colored(str(len(net_data)), color='blue')}] {colored('NETS', color='blue')}:")
-        #print(tabulate(net_data, headers=net_cols))
+    parser.add_argument("--all", type=str2bool, nargs='?', const=True,
+    			      default=True, help="Show Everything")
 
-        #vol_data, vol_cols = vol_info(client=cl)
-        #if len(vol_data) >= 1:
-        #    print(f"\n[{colored(str(len(net_data)), color='yellow')}] {colored('VOLUMES', color='yellow')}:")
-        #    print(tabulate(vol_data, headers=vol_cols))
-    except Exception as err:
-        print(f"Docker Engine/Daemon not running. Please start it. ERR: {err}")
+    parser.add_argument("-c", type=str2bool, nargs='?', const=True,
+    			      default=False, help="Show containers")
+
+    parser.add_argument("-i", type=str2bool, nargs='?', const=True,
+    		              default=False, help="Show images")
+
+    parser.add_argument("-n", type=str2bool, nargs='?', const=True,
+    			      default=False, help="Show networks")
+
+    parser.add_argument("-v", type=str2bool, nargs='?', const=True,
+			      default=False, help="Show volumes")
+
+    args = parser.parse_args()
+    main(args=args)
 
