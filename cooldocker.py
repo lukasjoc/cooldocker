@@ -1,31 +1,22 @@
 #!/usr/bin/env python3
 
 """ CoolDocker || list docker entities with color and count """
-
-from argparse import (
-    ArgumentParser,
-    ArgumentTypeError
-)
+import argparse
 from typing import List, Dict, Tuple, Any
 from dataclasses import dataclass
-from datetime import (
-    datetime as dt,
-    timedelta
-)
-from tabulate import tabulate as tab
-from termcolor import colored as co
+import datetime
+from datetime import datetime as dt
+from tabulate import tabulate
+from termcolor import colored
 from docker.errors import ( #type: ignore
     APIError, #type: ignore
     DockerException, #type: ignore
 )
+import docker
 from docker.models.images import Image #type: ignore
 from docker.models.containers import Container #type: ignore
 from docker.models.volumes import Volume #type: ignore
 from docker.models.networks import Network #type: ignore
-from docker import ( #type: ignore
-    from_env, #type: ignore
-    DockerClient #type: ignore
-)
 
 @dataclass
 class CoolDockerEntity:
@@ -48,7 +39,7 @@ class CoolDockerParser:
     - Networks
     """
     def __init__(self, client):
-        self.client: DockerClient = client
+        self.client: docker.DockerClient = client
         self.ctx: Dict[str, CoolDockerEntity] = {}
 
     # calc the delta from a given time string to current time
@@ -60,7 +51,7 @@ class CoolDockerParser:
             - dt.strptime(time.split(".")[0], pattern)
         )
         delta_secs_total = int(delta.total_seconds()) - (60*60)
-        delta_time_str: str = str(timedelta(seconds=delta_secs_total))
+        delta_time_str: str = str(datetime.timedelta(seconds=delta_secs_total))
         return (f"> {delta.days} days ago"
                 if delta.days >= 1
                 else f"{delta_time_str} ago")
@@ -68,11 +59,12 @@ class CoolDockerParser:
     # print the table data in a tabulated way and
     # also print the count of the entity in a header line
     @staticmethod
-    def print(entity: CoolDockerEntity, want: bool = True, color: str = None) -> None:
+    def fmt(entity: CoolDockerEntity, want: bool = True, color: str = None) -> None:
         if not want:
             return
-        print(f"[{co(str(entity.count), color=color)}] {co(entity.name, color=color)}:")
-        print(tab(entity.data.values(), headers=entity.cols) + "\n")
+        head_line = f"[{colored(str(entity.count), color=color)}] {colored(entity.name, color=color)}:"
+        body = tabulate(entity.data.values(), headers=entity.cols)
+        return f"{head_line}\n{body}\n"
 
     def containers(self) -> CoolDockerEntity:
         data: Dict[str, Tuple[str, ...]] = {}
@@ -215,14 +207,14 @@ class CoolDockerParser:
 
 def main(args=None):
     try:
-        docker_client = from_env()
+        docker_client = docker.from_env()
         cooldocker = CoolDockerParser(client=docker_client)
 
         args.all = not any([args.c, args.i, args.n, args.v])
-        cooldocker.print(want=args.all or args.c, entity=cooldocker.containers(), color="cyan")
-        cooldocker.print(want=args.all or args.i, entity=cooldocker.images(), color="red")
-        cooldocker.print(want=args.all or args.n, entity=cooldocker.networks(), color="green")
-        cooldocker.print(want=args.all or args.v, entity=cooldocker.volumes(), color="magenta")
+        print(cooldocker.fmt(want=args.all or args.c, entity=cooldocker.containers(), color="cyan"))
+        print(cooldocker.fmt(want=args.all or args.i, entity=cooldocker.images(), color="red"))
+        print(cooldocker.fmt(want=args.all or args.n, entity=cooldocker.networks(), color="green"))
+        print(cooldocker.fmt(want=args.all or args.v, entity=cooldocker.volumes(), color="magenta"))
 
     except (APIError, DockerException) as err:
         print(f"Docker Engine might not be running. Please check if it is and run this again. \nMessage: {err}")
@@ -237,12 +229,12 @@ def str2bool(v):
     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
     else:
-        raise ArgumentTypeError('Boolean value expected.')
+        raise argparse.ArgumentTypeError('Boolean value expected.')
 
 if __name__ == "__main__":
     __version__ = "1.0.1"
 
-    parser = ArgumentParser(
+    parser = argparse.ArgumentParser(
         description="list docker entities with color and count",
         epilog="For issues visit https://github.com/lukasjoc/cooldocker/issues"
     )
