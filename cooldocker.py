@@ -85,7 +85,7 @@ class CoolDockerParser:
             config: Dict[str, Any] = attrs["Config"]
 
             # get container base data
-            container_name: str = config["Hostname"]
+            container_name: str = config["Hostname"][:9]
             image: str = config["Image"]
             names: str = attrs["Name"][1:]
             created: str = self.__timedelta(time=attrs["Created"])
@@ -103,7 +103,7 @@ class CoolDockerParser:
                     for item in mapping:
                         host_ip = item["HostIp"]
                         host_port = item["HostPort"]
-                        ports += f"{host_ip}:{host_port}->{port} "
+                        ports += f"{host_ip}:{host_port}->{port}\n"
 
             # get the container ip
             ip: str = ns["IPAddress"]
@@ -132,14 +132,16 @@ class CoolDockerParser:
 
     def images(self, filters: Dict[str, bool] = None) -> CoolDockerEntity:
         data: Dict[str, Tuple[str, ...]] = {}
-        cols: List[str] = [ "ID", "REPO", "TAG", "CREATED", "SIZE (MiB)" ]
+        cols: List[str] = [ "ID(sha256)", "REPO", "TAG", "CREATED", "SIZE (MiB)" ]
 
         filters = filters if filters else { "dangling": False }
         filtered_images: List[Image] = self.client.images.list(filters=filters)
         for image in filtered_images:
             attrs: Dict[str, Any] = image.attrs
 
-            image_id: str = attrs["Id"]
+            image_id_splits: List[str] = attrs["Id"].split(":")
+            image_id_sha: str = image_id_splits[1][:9]
+
             created: str = self.__timedelta(time=attrs["Created"])
             mib_image_size = f"{attrs['Size']/8/1024**2:07.3f} MiB"
             repo_tags: List[str] = attrs["RepoTags"]
@@ -148,7 +150,7 @@ class CoolDockerParser:
             repo: str = first_tag[0] if tags_count >= 1 else ""
             tags: str = first_tag[1] if tags_count >= 1 else ""
 
-            data[image_id] = image_id, repo, tags, created, mib_image_size
+            data[image_id_sha] = image_id_sha, repo, tags, created, mib_image_size
 
         count: int = len(data)
         name: str = "IMAGE" if count <= 1 else "IMAGES"
@@ -170,7 +172,7 @@ class CoolDockerParser:
         for network in filtered_networks:
             attrs: Dict[str, Any] = network.attrs
 
-            network_id: str = attrs['Id']
+            network_id: str = attrs['Id'][:9]
             network_name: str = attrs["Name"]
             driver: str = attrs["Driver"]
             created: str = self.__timedelta(time=attrs["Created"])
@@ -240,7 +242,7 @@ def str2bool(v):
         raise ArgumentTypeError('Boolean value expected.')
 
 if __name__ == "__main__":
-    __version__ = "1.0.1"
+    __version__ = "1.1.0"
 
     parser = ArgumentParser(
         description="list docker entities with color and count",
